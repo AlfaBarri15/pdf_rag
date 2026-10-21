@@ -1,0 +1,36 @@
+[project]
+name = "software-doc-search-tool"
+version = "0.1.0"
+description = "RAG documentation search engine: ingest, embed, and store vectors in Postgres/pgvector"
+readme = "README.md"
+authors = [
+    { name = "AlfaBarri15", email = "alfabarri@outlook.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "certifi>=2026.7.22",
+    "cryptography>=50.0.1",
+    "fastapi>=0.141.1",
+    "psycopg[binary]>=3.3.6",
+    "pymupdf4llm>=1.28.2",
+    "pypdf>=6.19.0",
+    "sentence-transformers>=6.1.0",
+    "uvicorn>=0.53.0",
+]
+
+[project.scripts]
+software-doc-search-tool = "app.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "app"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13.0",
+    "pytest>=9.1.1",
+]

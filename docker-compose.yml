@@ -1,0 +1,135 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: rag-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Long-lived inference engine (image = runtime only; weights live on a volume).
+  llm:
+    image: ollama/ollama:latest
+    container_name: rag-llm
+    ports:
+      # Local debug only (uv on host → localhost:11434). Omit this publish in real prod.
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - model_weights:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # One-shot Job: sync chat model weights into the shared volume (prod-style model-sync).
+  model-sync:
+    image: ollama/ollama:latest
+    container_name: rag-model-sync
+    depends_on:
+      llm:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://llm:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Syncing model ${OLLAMA_MODEL:-llama3.2} into model_weights volume..."
+        ollama pull "${OLLAMA_MODEL:-llama3.2}"
+        echo "Model ready."
+    restart: "no"
+
+  api:
+    build: &api_build
+      context: .
+      dockerfile: docker/api/Dockerfile
+    container_name: rag-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment: &api_env
+      # Inside Compose, use service DNS names — not localhost.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      OLLAMA_BASE_URL: http://llm:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+    volumes: &api_volumes
+      - ./app:/app/app
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
+    healthcheck:
+      # slim image has no curl; reuse Python to hit the FastAPI /health route.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  # Chat window only. It calls the API's OpenAI-compatible route, which runs RAG.
+  # Direct Ollama is off so a model pick cannot skip retrieve → rerank → generate.
+  open-webui:
+    build:
+      context: ./docker/open-webui
+    image: rag-open-webui:local
+    container_name: rag-open-webui
+    ports:
+      - "${OPEN_WEBUI_PORT:-3000}:8080"
+    environment:
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_SECRET_KEY: local-dev-secret-key
+      OPENAI_API_BASE_URL: http://api:8000/v1
+      OPENAI_API_BASE_URLS: http://api:8000/v1
+      OPENAI_API_KEY: local-dev
+      OPENAI_API_KEYS: local-dev
+      # Local learning stack: skip the signup screen. Do not use this in a shared deploy.
+      WEBUI_AUTH: "false"
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Same image as api; different command — script loop, not an HTTP server.
+  ingest-worker:
+    build: *api_build
+    container_name: rag-ingest-worker
+    environment:
+      <<: *api_env
+      INGEST_WORKER_POLL_SECONDS: ${INGEST_WORKER_POLL_SECONDS:-2}
+    volumes: *api_volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python -m app.ingestion.worker
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  # Model weights (data), separate from the llm engine image — same idea as postgres_data.
+  model_weights:
+  open_webui_data:
