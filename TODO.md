@@ -28,9 +28,11 @@ Local RAG pipeline checklist (free/local stack; Cohere-shaped stages).
 - [x] Page-level chunks for eval 10-Ks (`strategy=pages`); strip PDF `NUL` bytes before store
 - [x] Hybrid retrieve: pgvector + `content_tsv` GIN, RRF merge, rerank `top_n=8`
 - [x] Deterministic scores: evidence overlap + gold numbers; grounded numeric answer prompt
+- [x] Local chat model: Ollama `qwen2.5:7b` (replaced `llama3.2`; same `generate.chat()` interface)
 
 ## Next
 
+- [ ] Improve **answer_hit** by changing the LLM. Retrieval is already ahead (`evidence_hit` ~97% vs `answer_hit` ~25% on FinanceBench 150). Try a stronger Ollama tag in `OLLAMA_MODEL` (then `docker compose run --rm model-sync`) or swap `generate.py` to Cohere Command. Re-score with `uv run python -m app.eval.runner --dataset financebench --limit 5` before a full 150.
 - [ ] Optional: add `HF_TOKEN` to `.env` + docker-compose for Hugging Face Hub rate limits
 - [ ] Optional: swap Ollama client for Cohere Chat behind the same `generate` interface
 - [ ] Nice-to-have: CI (run pytest on PR)
@@ -44,4 +46,5 @@ Local RAG pipeline checklist (free/local stack; Cohere-shaped stages).
 - API reaches the LLM at `http://llm:11434` inside Compose (service DNS). Engine image ≠ model weights (`model_weights` volume).
 - Online flow mirrors offline: `app/ingestion/pipeline.py` ↔ `app/retrieval/pipeline.py`.
 - Run eval from the project root with `uv run`, not system `python` (macOS CA bundle + project deps).
+- Chat weights: `OLLAMA_MODEL` (default `qwen2.5:7b`). A 7B local model still under-extracts FinanceBench answers; bump the tag or use Cohere to move `answer_hit`.
 - Existing volumes: `migrate_eval.sql` then `migrate_fts.sql`. Software-doc ingest stays `markdown_sections`; FinanceBench uses `pages`.

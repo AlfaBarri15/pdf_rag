@@ -6,6 +6,9 @@ __pycache__/
 !.env.example
 data/*
 !data/.gitkeep
+# FinanceBench PDFs / questions (do not ignore app/eval/)
+data/eval/
+/eval/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

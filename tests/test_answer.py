@@ -1,3 +1,4 @@
+import io
 import json
 import urllib.error
 import urllib.request
@@ -67,3 +68,37 @@ def test_run_answer_returns_citations():
 
 def test_llm_error_type_exists():
     assert issubclass(LLMError, RuntimeError)
+
+
+def test_chat_retries_http_500(monkeypatch):
+    calls = {"n": 0}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {"model": "llama3.2", "message": {"content": "ok"}}
+            ).encode()
+
+    def fake_urlopen(request, timeout=0):
+        calls["n"] += 1
+        if calls["n"] < 2:
+            raise urllib.error.HTTPError(
+                "http://llm/api/chat",
+                500,
+                "Internal Server Error",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error":"model runner has unexpectedly stopped"}'),
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("app.retrieval.utils.generate.time.sleep", lambda _seconds: None)
+    result = chat(user_prompt="hello")
+    assert result["answer"] == "ok"
+    assert calls["n"] == 2

@@ -114,7 +114,7 @@ Our embeddings are **normalized**. Cosine measures direction/alignment of meanin
 | Database     | PostgreSQL 17 + pgvector                                    |
 | Embeddings   | `sentence-transformers` (`all-MiniLM-L6-v2`)                |
 | Rerank       | `CrossEncoder` (`ms-marco-MiniLM-L-6-v2`)                   |
-| LLM          | Ollama (`llama3.2`) in Compose `llm` service                |
+| LLM          | Ollama (`qwen2.5:7b`) in Compose `llm` service              |
 | PDF parsing  | pymupdf4llm (Markdown) + pypdf (pages / fallback)           |
 | Runtime      | Docker Compose (`api`, `ingest-worker`, `postgres`, `llm`, `model-sync`, `open-webui`) |
 
@@ -158,7 +158,7 @@ docker compose up --build -d
 | Chat (Open WebUI) | http://localhost:3000          |
 | LLM API (debug)   | http://localhost:11434         |
 
-First `docker compose up` syncs `llama3.2` via the one-shot `model-sync` job (can take a few minutes; weights persist in the `model_weights` volume).
+First `docker compose up` syncs `qwen2.5:7b` via the one-shot `model-sync` job (can take a few minutes; weights persist in the `model_weights` volume). That 7B chat model is the local stand-in for a grounded generator (Cohere Command in production). If it OOMs on your laptop, set `OLLAMA_MODEL=llama3.2` in `.env` and re-run `docker compose run --rm model-sync`.
 
 Optional: run only Postgres in Docker and the API with `uv`:
 
@@ -234,14 +234,21 @@ Search is hybrid: cosine neighbors fused with full-text on `chunks.content_tsv`,
 | `evidence_recall` | Share whose labeled fact (overlapping words + a gold number) is in those chunks |
 | `answer_recall` | Share whose gold answer, or its numbers, appeared in the model answer |
 
-Read the latest run:
+On the 150-question FinanceBench run, **retrieval is ahead of generation**: `evidence_hit` was ~97% while `answer_hit` was ~25%. The labeled table/page is usually in context; the chat model still misses the gold string. The next lever is a **stronger LLM** (`OLLAMA_MODEL` in `.env`, then `docker compose run --rm model-sync`), not another retrieve rewrite. Production analog: Cohere Command behind the same `generate.chat()` client.
 
-```sql
-SELECT dataset, case_count, doc_recall, evidence_recall, answer_recall, finished_at
-FROM eval_runs
-ORDER BY started_at DESC
-LIMIT 1;
+Hit-type percentages for the latest run (True count / questions):
+
+```bash
+uv run python -m app.eval.summary
 ```
+
+Per-question hits plus a short gold vs model preview:
+
+```bash
+uv run python -m app.eval.results
+```
+
+Pass `--run-id <uuid>` on either command to inspect an older run.
 
 A later golden set is the same layout: `data/eval/<name>/questions.jsonl` and `pdfs/`. Do not send eval questions through Open WebUI.
 
@@ -254,7 +261,7 @@ docker exec -i rag-postgres psql -U rag -d rag < docker/postgres/migrate_fts.sql
 
 ## What’s next
 
-Tracked in [`TODO.md`](TODO.md): optional `HF_TOKEN`; Cohere Chat behind the same `generate` client; CI; later a file-upload endpoint. Telemetry UI stays deferred.
+Tracked in [`TODO.md`](TODO.md): **change the LLM to raise `answer_hit`**; optional `HF_TOKEN`; Cohere Chat behind the same `generate` client; CI; later a file-upload endpoint. Telemetry UI stays deferred.
 
 ## Author
 

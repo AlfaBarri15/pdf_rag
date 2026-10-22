@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -15,7 +16,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "Start with the direct answer in one or two short sentences, then cite like [1]. "
     "When the question asks for a figure, find the named line item in the sources "
     "(for example Purchases of property, plant and equipment / PP&E, not a made-up acronym) "
-    "and copy that number. Do not invent arithmetic from other cash-flow or balance-sheet totals. "
+    "and copy that number. Prefer the audited statement row over outlook, guidance, or ranges. "
+    "Do not invent arithmetic from other cash-flow or balance-sheet totals. "
     "Use the units the question asked for. If the table is in millions and the question asks "
     "for billions, divide by 1000. Money uses $ and the precision the question used "
     "(for example $1577.00 or $8.70). "
@@ -39,32 +41,50 @@ def chat(
     model: str = OLLAMA_MODEL,
     base_url: str = OLLAMA_BASE_URL,
     timeout_seconds: float = 120.0,
+    retries: int = 3,
 ) -> dict[str, Any]:
     """POST /api/chat on Ollama with stream=false; returns {model, answer, raw}."""
-    request = _chat_request(
-        user_prompt=user_prompt,
-        system_prompt=system_prompt,
-        model=model,
-        base_url=base_url,
-        stream=False,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        raise _llm_http_error(exc) from exc
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-        raise LLMError(f"LLM request failed: {exc}") from exc
+    last_error: LLMError | None = None
+    attempts = max(1, retries)
+    for attempt in range(1, attempts + 1):
+        request = _chat_request(
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            model=model,
+            base_url=base_url,
+            stream=False,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            last_error = _llm_http_error(exc)
+            if exc.code < 500 or attempt == attempts:
+                raise last_error from exc
+            time.sleep(min(10 * attempt, 30))
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            last_error = LLMError(f"LLM request failed: {exc}")
+            if attempt == attempts:
+                raise last_error from exc
+            time.sleep(min(10 * attempt, 30))
+            continue
 
-    answer = _message_content(body).strip()
-    if not answer:
-        raise LLMError("LLM returned an empty answer")
+        answer = _message_content(body).strip()
+        if not answer:
+            last_error = LLMError("LLM returned an empty answer")
+            if attempt == attempts:
+                raise last_error
+            time.sleep(min(10 * attempt, 30))
+            continue
 
-    return {
-        "model": body.get("model") or model,
-        "answer": answer,
-        "raw": body,
-    }
+        return {
+            "model": body.get("model") or model,
+            "answer": answer,
+            "raw": body,
+        }
+
+    raise last_error or LLMError("LLM request failed")
 
 
 def open_chat_stream(

@@ -1,4 +1,8 @@
-from app.retrieval.utils.prompt import build_answer_prompt, build_citations
+from app.retrieval.utils.prompt import (
+    build_answer_prompt,
+    build_citations,
+    excerpt_for_query,
+)
 
 
 def test_build_citations_numbers_results():
@@ -47,5 +51,27 @@ def test_build_answer_prompt_includes_sources_and_question():
     assert "[1]" in prompt
     assert "PostgreSQL is open source" in prompt
     assert "What is PostgreSQL?" in prompt
-    assert "Copy the line item" in prompt
+    assert "statement line item" in prompt
     assert "No essay" in prompt
+
+
+def test_excerpt_keeps_ppe_row_and_drops_unrelated_notes():
+    page = "\n".join(
+        [
+            "Goodwill increased during the year for unrelated reasons.",
+            "The Company expects 2018 capital spending of $1.7 billion to $1.9 billion.",
+            "Cash Flows from Investing Activities",
+            "Purchases of property, plant and equipment (PP&E)",
+            "$(1,577)",
+            "Proceeds from sale of PP&E and other assets 262",
+            "3M Belgium received a report from the Flemish inspectorate.",
+        ]
+    )
+    excerpt = excerpt_for_query(
+        page,
+        "What is the FY2018 capital expenditure amount for 3M from the cash flow statement?",
+    )
+    assert "1,577" in excerpt
+    assert "Purchases of property" in excerpt
+    assert "Flemish inspectorate" not in excerpt
+    assert "1.7 billion to $1.9 billion" not in excerpt

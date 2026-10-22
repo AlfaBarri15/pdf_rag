@@ -24,6 +24,9 @@ services:
     ports:
       # Local debug only (uv on host → localhost:11434). Omit this publish in real prod.
       - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      # One generation at a time so a 7B chat model is less likely to OOM on a laptop.
+      OLLAMA_NUM_PARALLEL: "1"
     volumes:
       - model_weights:/root/.ollama
     healthcheck:
@@ -45,8 +48,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        echo "Syncing model ${OLLAMA_MODEL:-llama3.2} into model_weights volume..."
-        ollama pull "${OLLAMA_MODEL:-llama3.2}"
+        echo "Syncing model ${OLLAMA_MODEL:-qwen2.5:7b} into model_weights volume..."
+        ollama pull "${OLLAMA_MODEL:-qwen2.5:7b}"
         echo "Model ready."
     restart: "no"
 
@@ -61,7 +64,7 @@ services:
       # Inside Compose, use service DNS names — not localhost.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       OLLAMA_BASE_URL: http://llm:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
     volumes: &api_volumes
       - ./app:/app/app
       - ./data:/app/data:ro

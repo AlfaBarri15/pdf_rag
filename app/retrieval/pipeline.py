@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import OLLAMA_MODEL
+from app.retrieval.utils.extract import extract_numeric_answer
 from app.retrieval.utils.generate import chat
 from app.retrieval.utils.prompt import build_answer_prompt, build_citations
 from app.retrieval.utils.search import search_chunks
@@ -76,12 +77,19 @@ def run_answer(
     )
     retrieval = prepared["retrieval"]
     citations = prepared["citations"]
-    llm = chat(user_prompt=prepared["prompt"], model=model or OLLAMA_MODEL)
+    extracted = extract_numeric_answer(retrieval["query"], citations)
+    if extracted:
+        answer = f"{extracted} [1]"
+        model_name = "extract"
+    else:
+        llm = chat(user_prompt=prepared["prompt"], model=model or OLLAMA_MODEL)
+        answer = llm["answer"]
+        model_name = llm["model"]
 
     return {
         "query": retrieval["query"],
-        "answer": llm["answer"],
-        "model": llm["model"],
+        "answer": answer,
+        "model": model_name,
         "top_k": retrieval["top_k"],
         "rerank": retrieval["rerank"],
         "top_n": retrieval["top_n"],

@@ -22,7 +22,8 @@ from app.ingestion.utils.chunker import (
 )
 from app.ingestion.utils.embeddings import EMBEDDING_MODEL_NAME
 from app.ingestion.utils.store import fetch_document_summary
-from app.retrieval.pipeline import run_answer
+from app.retrieval.pipeline import prepare_answer, run_answer
+from app.retrieval.utils.generate import LLMError
 from app.retrieval.utils.rerank import RERANK_MODEL_NAME
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,19 @@ def ingest_missing_pdfs(
     return ingested
 
 
+def answer_question(*, query: str, dataset: str) -> dict[str, object]:
+    """Answer one eval question. Keep retrieved chunks if the LLM process dies."""
+    try:
+        return run_answer(query=query, dataset=dataset)
+    except LLMError as exc:
+        logger.warning("llm failed query=%s: %s", query, exc)
+        prepared = prepare_answer(query=query, dataset=dataset)
+        return {
+            "answer": "",
+            "results": prepared["retrieval"]["results"],
+        }
+
+
 def run_eval(*, dataset: str, limit: int | None = None) -> dict[str, object]:
     """Ingest missing PDFs, answer each question, and store one eval run."""
     folder = dataset_dir(DATA_ROOT, dataset)
@@ -102,7 +116,7 @@ def run_eval(*, dataset: str, limit: int | None = None) -> dict[str, object]:
     answer_hits = 0
     for item in questions:
         logger.info("question id=%s", item.id)
-        answered = run_answer(query=item.question, dataset=dataset)
+        answered = answer_question(query=item.question, dataset=dataset)
         scored = score_case(
             doc_name=item.doc_name,
             evidence=item.evidence,

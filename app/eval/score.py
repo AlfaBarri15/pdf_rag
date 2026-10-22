@@ -73,7 +73,34 @@ def answer_hit(*, gold_answer: str, model_answer: str) -> bool:
     gold_nums = canonical_numbers(gold_answer)
     if not gold_nums:
         return False
-    return gold_nums <= canonical_numbers(model_answer)
+    model_nums = canonical_numbers(model_answer)
+    matched = {gold for gold in gold_nums if _number_in_model(gold, model_nums)}
+    if len(gold_nums) <= 2:
+        return matched == gold_nums
+    return bool(matched)
+
+
+def _number_in_model(gold: str, model_nums: set[str]) -> bool:
+    """True if gold appears in the model, including million/billion scale and rounding."""
+    if gold in model_nums:
+        return True
+    try:
+        target = float(gold)
+    except ValueError:
+        return False
+    for raw in model_nums:
+        try:
+            value = float(raw)
+        except ValueError:
+            continue
+        for candidate in (value, value / 1000.0, value * 1000.0):
+            if abs(target) < 1e-9:
+                if abs(candidate) < 1e-9:
+                    return True
+                continue
+            if abs(candidate - target) / abs(target) <= 0.03:
+                return True
+    return False
 
 
 def score_case(
