@@ -85,6 +85,7 @@ def run_ingest(
     """Full offline ingest for one document (omit max_pages for the whole PDF)."""
 
     def _progress(stage: str) -> None:
+        """Forward the current ingest stage to the caller when a callback was passed."""
         if on_progress is not None:
             on_progress(stage)
 

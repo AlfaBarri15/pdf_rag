@@ -14,10 +14,12 @@ from app.eval.store import fetch_cases, fetch_latest_run, fetch_run
 
 
 def _flag(value: bool | None) -> str:
+    """`t` or `f` for a hit column."""
     return "t" if value else "f"
 
 
 def _clip(text: str | None, width: int) -> str:
+    """Collapse whitespace and truncate to `width` characters."""
     collapsed = " ".join((text or "").split())
     if len(collapsed) <= width:
         return collapsed
@@ -49,12 +51,14 @@ def format_report(run: dict, cases: list[dict]) -> str:
 
 
 def _rate(value: float | None) -> str:
+    """Format a recall to three decimals, or `n/a` when the run has no score."""
     if value is None:
         return "n/a"
     return f"{float(value):.3f}"
 
 
 def main() -> None:
+    """Print one eval run from Postgres (latest, or `--run-id`)."""
     parser = argparse.ArgumentParser(description="Print scored eval cases from Postgres")
     parser.add_argument("--run-id", default=None, help="Eval run UUID (default: latest)")
     args = parser.parse_args()

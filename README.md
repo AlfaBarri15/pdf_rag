@@ -99,6 +99,47 @@ CREATE INDEX chunks_embedding_hnsw_idx
 **Why cosine (`vector_cosine_ops`) and not L2?**  
 Our embeddings are **normalized**. Cosine measures direction/alignment of meaning. pgvector also offers `vector_l2_ops` (Euclidean) and `vector_ip_ops` (inner product); with unit vectors, cosine and inner product rank similarly—we pick cosine to match the normalized semantic-search setup. Search queries should use the matching distance operator (e.g. cosine `<=>`) so Postgres can use this index.
 
+### Hybrid top-k retrieval
+
+An answer reads a short list of chunks, called **top-k**, not the whole corpus. `POST /answer/` asks each search for `top_k=20` chunks, fuses those two rankings, then the cross-encoder keeps `top_n=8` for the prompt.
+
+**1. Two ranked lists, same filters**
+
+Vector search and keyword search both apply the dataset filter and any company or year parsed from the question (`3M_2018_10K`-style titles).
+
+| List | How it ranks | What the score means |
+|------|----------------|----------------------|
+| Vector | pgvector cosine (`<=>`) on `chunks.embedding`, via the HNSW index | Distance: lower is closer in meaning |
+| Keyword | Postgres full-text on `chunks.content_tsv` (`to_tsquery`) | `ts_rank_cd`: higher means more of the question’s words |
+
+Those two scores use different units, so the pipeline keeps each list’s **order** and throws the raw numbers away before the merge. `lexical_tsquery` turns the question into an OR of content words (`capital | expenditure | 2018`). With no such words, or if full-text is unavailable, the vector order is the result.
+
+**2. Reciprocal rank fusion (`rrf_merge`)**
+
+`app/retrieval/utils/search.py` scores a chunk by its place in each list. Rank starts at 1. The constant `rrf_k` is 60 (the usual reciprocal-rank-fusion constant):
+
+```text
+score(chunk) = Σ  1 / (60 + rank in that list)
+```
+
+Rank 1 in one list scores `1/61` ≈ 0.0164. Rank 2 scores `1/62` ≈ 0.0161. The gaps are small, so a chunk near the top of **both** lists beats a chunk that only one search found. The fused ids are cut back to 20 (`retrieve_k`).
+
+The unit test uses two short lists:
+
+| Chunk | Vector rank | Keyword rank | Score |
+|-------|-------------|--------------|-------|
+| `shared` | 2 | 2 | `1/62 + 1/62` ≈ 0.032 |
+| `vec-only` | 1 | — | `1/61` ≈ 0.016 |
+| `lex-only` | — | 1 | `1/61` ≈ 0.016 |
+
+`shared` comes out first.
+
+**3. Rerank to top-n**
+
+The cross-encoder (`ms-marco-MiniLM-L-6-v2`) reads the question together with each of those 20 chunks and keeps the best 8. Those 8 are the citations in the prompt. Rerank is the slow step, so it runs on the fused top-k and not on every row in `chunks`.
+
+That is the same shape as Cohere-style Embed → retrieve → Rerank: a cheap top-k, then a stronger model on a short list.
+
 ### API surface
 
 - **Public:** `POST /ingest/` (async enqueue), `GET /ingest/jobs/{id}`, `POST /answer/`, `GET /health`.
@@ -226,7 +267,7 @@ uv run python -m app.eval.runner --dataset financebench --limit 5
 
 `download` pulls the public FinanceBench set (150 questions and their PDFs) into `data/eval/financebench/`. The runner ingests those filings as **one chunk per PDF page** (re-ingests if an older heading strategy is stored), calls `run_answer` with `dataset=financebench`, and stores one `eval_runs` row plus one `eval_cases` row per question.
 
-Search is hybrid: cosine neighbors fused with full-text on `chunks.content_tsv`, then rerank. Existing databases need the migrate scripts below before the first run.
+Search is hybrid: cosine neighbors fused with full-text on `chunks.content_tsv`, then rerank. How those lists become one top-k is under [Hybrid top-k retrieval](#hybrid-top-k-retrieval). Existing databases need the migrate scripts below before the first run.
 
 | Metric | Meaning |
 |--------|---------|

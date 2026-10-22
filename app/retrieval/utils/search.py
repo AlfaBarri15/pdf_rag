@@ -52,6 +52,7 @@ def title_matches_constraints(
 
 
 def _company_from_query(query: str, titles: list[str]) -> str | None:
+    """The one company name that appears in the question, or None when zero or several match."""
     hits: list[str] = []
     for company in _companies_from_titles(titles):
         if re.search(rf"(?i)\b{re.escape(company)}\b", query):
@@ -62,6 +63,7 @@ def _company_from_query(query: str, titles: list[str]) -> str | None:
 
 
 def _companies_from_titles(titles: list[str]) -> list[str]:
+    """Unique company tokens: the part of each `{company}_{year}_{form}` title before the first underscore."""
     seen: list[str] = []
     for title in titles:
         token = (title or "").split("_", 1)[0].strip()
@@ -72,6 +74,7 @@ def _companies_from_titles(titles: list[str]) -> list[str]:
 
 
 def _year_from_query(query: str) -> str | None:
+    """A single FY or calendar year from the question, or None when none or several appear."""
     fy_years = list(dict.fromkeys(_FY_YEAR.findall(query)))
     if fy_years:
         return fy_years[0] if len(fy_years) == 1 else None
@@ -116,7 +119,12 @@ def rrf_merge(
     retrieve_k: int,
     rrf_k: int = _RRF_K,
 ) -> list[str]:
-    """Reciprocal rank fusion over one or more ranked id lists."""
+    """Fuse ranked chunk-id lists with reciprocal rank fusion.
+
+    Each list adds ``1 / (rrf_k + rank)`` (rank starts at 1). Scores add across
+    lists, so a chunk near the top of both vector search and keyword search
+    outranks one that only one list found. Returns the top ``retrieve_k`` ids.
+    """
     scores: dict[str, float] = {}
     for ranked in ranked_id_lists:
         for rank, item_id in enumerate(ranked, start=1):

@@ -162,6 +162,7 @@ def _chunk(
     delta: dict[str, Any],
     finish_reason: str | None,
 ) -> dict[str, Any]:
+    """One OpenAI `chat.completion.chunk` object."""
     return {
         "id": completion_id,
         "object": "chat.completion.chunk",
@@ -178,6 +179,7 @@ def _chunk(
 
 
 def _sse(payload: dict[str, Any]) -> str:
+    """One Server-Sent Events `data:` frame."""
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 

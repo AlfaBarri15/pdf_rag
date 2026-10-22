@@ -29,6 +29,7 @@ def format_hit_percentages(run: dict, cases: list[dict]) -> str:
 
 
 def main() -> None:
+    """Print the percent of True doc, evidence, and answer hits for one eval run."""
     parser = argparse.ArgumentParser(
         description="Print % True for doc_hit, evidence_hit, and answer_hit"
     )

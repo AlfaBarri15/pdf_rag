@@ -29,6 +29,7 @@ if not DATA_ROOT.exists():
 
 
 def _resolve_data_path(relative_path: str) -> Path:
+    """Absolute path under DATA_ROOT. Rejects paths that leave the data directory."""
     path = (DATA_ROOT / relative_path).resolve()
     path.relative_to(DATA_ROOT.resolve())
     if not path.is_file():
@@ -43,6 +44,7 @@ def process_job(job: dict) -> None:
     params = job.get("params") or {}
 
     def on_progress(stage: str) -> None:
+        """Write the current ingest stage onto the job row."""
         update_job_progress(job_id=job_id, stage=stage)
         logger.info("job=%s stage=%s", job_id, stage)
 
@@ -88,6 +90,7 @@ def run_forever(*, poll_seconds: float = POLL_SECONDS) -> None:
 
 
 def main() -> None:
+    """Start the ingest worker and poll until the process stops."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",

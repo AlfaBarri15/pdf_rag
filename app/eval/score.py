@@ -132,6 +132,7 @@ def recall(hits: int, total: int) -> float:
 
 
 def _top_score(results: list[dict[str, Any]]) -> float | None:
+    """Score of the first retrieved chunk: rerank score when present, otherwise cosine score."""
     if not results:
         return None
     first = results[0]

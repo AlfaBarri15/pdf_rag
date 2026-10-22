@@ -141,6 +141,7 @@ def excerpt_for_query(content: str, query: str, *, max_chars: int = _MAX_EXCERPT
 
 
 def _query_terms(query: str) -> set[str]:
+    """Words to match in a chunk, plus finance aliases the question may not spell out (capex, PP&E)."""
     words = set(_QUERY_WORD.findall(query.lower()))
     extra: set[str] = set()
     blob = query.lower()

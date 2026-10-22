@@ -85,6 +85,7 @@ def download_financebench(dest: Path) -> dict[str, int]:
 
 
 def main() -> None:
+    """Download FinanceBench questions and PDFs into `data/eval/financebench`."""
     root = Path(__file__).resolve().parents[2] / "data" / "eval" / "financebench"
     stats = download_financebench(root)
     print(

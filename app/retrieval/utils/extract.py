@@ -33,6 +33,7 @@ def extract_numeric_answer(query: str, citations: list[dict[str, Any]]) -> str |
 
 
 def _citation_lines(citations: list[dict[str, Any]]) -> list[str]:
+    """Flatten retrieved chunk text into lines so a label and its number can sit on different rows."""
     lines: list[str] = []
     for citation in citations:
         lines.extend(str(citation.get("content") or "").splitlines())
@@ -40,6 +41,7 @@ def _citation_lines(citations: list[dict[str, Any]]) -> list[str]:
 
 
 def _amount_after_labels(lines: list[str], labels: tuple[str, ...]) -> float | None:
+    """First numeric amount in the few lines after a matching statement label."""
     for index, line in enumerate(lines):
         low = re.sub(r"[\s–—−-]+", " ", line.lower())
         if not any(label in low for label in labels):
@@ -52,6 +54,7 @@ def _amount_after_labels(lines: list[str], labels: tuple[str, ...]) -> float | N
 
 
 def _first_amount(text: str) -> float | None:
+    """First dollar-like number in text, skipping years and values below 1."""
     for match in _AMOUNT.finditer(text):
         raw = match.group(1).replace(",", "")
         if _YEAR.fullmatch(raw):
@@ -66,6 +69,7 @@ def _first_amount(text: str) -> float | None:
 
 
 def _format_amount(amount: float | None, query: str) -> str | None:
+    """Render a figure as `$x.xx`. Scale millions to billions when the question asks for billions."""
     if amount is None:
         return None
     blob = query.lower()

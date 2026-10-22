@@ -162,6 +162,7 @@ def run_eval(*, dataset: str, limit: int | None = None) -> dict[str, object]:
 
 
 def main() -> None:
+    """Score a dataset through the RAG pipeline and print recall."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Score a dataset through the RAG pipeline")
     parser.add_argument("--dataset", default="financebench")

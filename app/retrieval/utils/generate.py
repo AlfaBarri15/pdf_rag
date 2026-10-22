@@ -139,6 +139,7 @@ def _chat_request(
     base_url: str,
     stream: bool,
 ) -> urllib.request.Request:
+    """POST body for Ollama `/api/chat` at temperature 0."""
     cleaned = user_prompt.strip()
     if not cleaned:
         raise ValueError("user_prompt must not be empty")
@@ -162,10 +163,12 @@ def _chat_request(
 
 
 def _message_content(body: dict[str, Any]) -> str:
+    """Assistant text from one Ollama chat JSON object."""
     message = body.get("message") or {}
     return message.get("content") or ""
 
 
 def _llm_http_error(exc: urllib.error.HTTPError) -> LLMError:
+    """Turn an HTTP error body into LLMError."""
     detail = exc.read().decode("utf-8", errors="replace")
     return LLMError(f"LLM HTTP {exc.code}: {detail}")
