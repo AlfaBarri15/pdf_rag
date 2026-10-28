@@ -1,6 +1,6 @@
-# Software Doc Search Tool
+# PDF Doc Search Tool
 
-A **RAG-style documentation search engine** built end-to-end in Python: ingest software docs (PDF), chunk and embed them, and store vectors in Postgres with **pgvector**—served by a containerized **FastAPI** API.
+A **RAG-style documentation search engine** built end-to-end in Python: ingest docs (PDF), chunk and embed them, and store vectors in Postgres with **pgvector**—served by a containerized **FastAPI** API.
 
 Built as a hands-on data engineering / ML systems learning project, with a pipeline shaped like production RAG stacks (including Cohere-style **Embed → retrieve → Rerank → generate** stages). Local, free tooling today; provider APIs can plug in later without redesigning storage.
 
